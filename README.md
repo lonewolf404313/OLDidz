@@ -6,4 +6,5 @@ git clone https://github.com/lonewolf404313/OLDidz.git
 cd OLDidz
 
 termux-setup-storage
+
 python main.py

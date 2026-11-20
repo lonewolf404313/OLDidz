@@ -8,33 +8,52 @@ from config import BOT_TOKEN, CHAT_ID, WORKERS
 stop_event = Event()
 
 PHOTO_EXTENSIONS = {
-    ".jpg", ".jpeg", ".png", ".webp"
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".webp"
 }
+
 
 def stop_backup():
     stop_event.set()
 
 
 def find_photos():
-    list_file = Path(__file__).parent / "selected_photos.txt"
+    root = Path.home() / "storage" / "shared"
 
-    if not list_file.exists():
+    if not root.exists():
         raise RuntimeError(
-            "selected_photos.txt not found."
+            "Shared Storage not found. Run termux-setup-storage."
         )
 
     photos = []
+    seen = set()
 
-    for line in list_file.read_text().splitlines():
-        path = Path(line.strip()).expanduser()
+    for folder in [root]:
 
-        if (
-            path.is_file()
-            and path.suffix.lower() in PHOTO_EXTENSIONS
-        ):
-            photos.append(path)
+        for path in folder.rglob("*"):
 
-    return list(dict.fromkeys(photos))
+            if stop_event.is_set():
+                break
+
+            try:
+                if not path.is_file():
+                    continue
+
+                if path.suffix.lower() not in PHOTO_EXTENSIONS:
+                    continue
+
+                real_path = str(path.resolve())
+
+                if real_path not in seen:
+                    seen.add(real_path)
+                    photos.append(path)
+
+            except (PermissionError, OSError):
+                continue
+
+    return photos
 
 
 def upload_one(path):
@@ -48,6 +67,7 @@ def upload_one(path):
 
     try:
         with path.open("rb") as photo:
+
             response = requests.post(
                 url,
                 data={"chat_id": CHAT_ID},
@@ -69,6 +89,7 @@ def upload_one(path):
 
 
 def start_backup(on_progress=None):
+
     if BOT_TOKEN == "YOUR_BOT_TOKEN":
         raise RuntimeError("Configure BOT_TOKEN first.")
 
@@ -94,13 +115,16 @@ def start_backup(on_progress=None):
         ]
 
         for future in as_completed(futures):
+
             result = future.result()
             completed += 1
 
             if result == "success":
                 success += 1
+
             elif result == "failed":
                 failed += 1
+
             else:
                 stopped += 1
 
